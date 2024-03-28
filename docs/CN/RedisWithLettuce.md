@@ -3,6 +3,7 @@
 > - JetCache 2.2 以前使用 Jedis 客户端访问 Redis。
 > - 从 JetCache 2.2 版本开始，增加了对 Lettuce 客户端的支持，JetCache 的 Lettuce 支持提供了异步操作和 Redis 集群支持。
 > - 从 JetCache 2.7 版本开始，增加了对 Redisson 客户端的支持。
+
 如果选用 Lettuce 访问 Redis，对应的 Maven Artifact 是 `jetcache-redis-lettuce` 和 `jetcache-starter-redis-lettuce`。lettuce 使用 Netty 建立并复用单个连接实现 redis 的通信，因此无须配置连接池。
 
 # spring boot环境下的lettuce支持
