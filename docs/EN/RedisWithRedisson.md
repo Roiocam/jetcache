@@ -7,7 +7,7 @@ Add *jetcache-redssion* or *jetcache-starter-redssion*(spring boot) to *pom.xml*
 # with spring boot
 
 JetCache Redisson does not support creating clients through configuration, but instead obtains the Client instance by getting the Spring bean. 
-Therefore, when using Redisson support in Spring Boot, provide redisson client bean name as `redissonClient` in configured is enough.
+Therefore, when using Redisson support in Spring Boot, provide redisson client spring bean name through `redissonClient` property is enough.
 
 application.yml (without local cache configurations):
 
