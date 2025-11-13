@@ -110,9 +110,8 @@ public class RedisLettuceAutoConfiguration {
             // eg: "remote.default.client"
             autoConfigureBeans.getCustomContainer().put(cacheAreaWithPrefix + ".client", client);
             LettuceConnectionManager m = LettuceConnectionManager.defaultManager();
-            m.init(client, connection);
+            m.init(client, connection, pubSubConnection);
             if (enablePubSub) {
-                m.init(client, pubSubConnection);
                 autoConfigureBeans.getCustomContainer().put(cacheAreaWithPrefix + ".pubSubConnection", m.pubSubConnection(client));
             }
             autoConfigureBeans.getCustomContainer().put(cacheAreaWithPrefix + ".connection", m.connection(client));

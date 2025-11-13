@@ -38,7 +38,7 @@ public class LettuceFactory implements FactoryBean {
             key += ".connection";
         } else if (StatefulRedisPubSubConnection.class.isAssignableFrom(clazz)){
             key += ".pubSubConnection";
-        }else if (RedisClusterCommands.class.isAssignableFrom(clazz)) {
+        } else if (RedisClusterCommands.class.isAssignableFrom(clazz)) {
             // RedisCommands extends RedisClusterCommands
             key += ".commands";
         } else if (RedisClusterAsyncCommands.class.isAssignableFrom(clazz)) {
