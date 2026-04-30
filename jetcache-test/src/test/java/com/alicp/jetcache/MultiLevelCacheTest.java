@@ -119,6 +119,46 @@ public class MultiLevelCacheTest extends AbstractCacheTest {
         });
     }
 
+    @Test
+    public void defaultPutAllShouldUseSubCacheExpire() {
+        initL1L2(200);
+        l1Cache.config().setExpireAfterWriteInMillis(50);
+        cache = MultiLevelCacheBuilder.createMultiLevelCacheBuilder()
+                .expireAfterWrite(200, TimeUnit.MILLISECONDS)
+                .addCache(l1Cache, l2Cache)
+                .buildCache();
+
+        long beforePut = System.currentTimeMillis();
+        cache.put("defaultPut_key", "V1");
+        assertHolderTtlLessThan("defaultPut_key", beforePut, 120);
+
+        Map map = new HashMap();
+        map.put("defaultPutAll_key", "V2");
+        long beforePutAll = System.currentTimeMillis();
+        cache.putAll(map);
+        assertHolderTtlLessThan("defaultPutAll_key", beforePutAll, 120);
+    }
+
+    @Test
+    public void explicitPutShouldNotBeCappedBySubCacheExpire() {
+        initL1L2(200);
+        l1Cache.config().setExpireAfterWriteInMillis(50);
+        cache = MultiLevelCacheBuilder.createMultiLevelCacheBuilder()
+                .expireAfterWrite(200, TimeUnit.MILLISECONDS)
+                .addCache(l1Cache, l2Cache)
+                .buildCache();
+
+        long beforePut = System.currentTimeMillis();
+        cache.put("explicitPut_key", "V1", 500, TimeUnit.MILLISECONDS);
+        assertHolderTtlGreaterThan("explicitPut_key", beforePut, 300);
+
+        Map map = new HashMap();
+        map.put("explicitPutAll_key", "V2");
+        long beforePutAll = System.currentTimeMillis();
+        cache.putAll(map, 500, TimeUnit.MILLISECONDS);
+        assertHolderTtlGreaterThan("explicitPutAll_key", beforePutAll, 300);
+    }
+
     private void doMonitoredTest(int expireMillis, boolean verboseLog, Runnable test) {
         initL1L2(expireMillis);
         DefaultCacheMonitor m1 = new DefaultCacheMonitor("l1");
@@ -201,5 +241,28 @@ public class MultiLevelCacheTest extends AbstractCacheTest {
             c = ((ProxyCache) c).getTargetCache();
         }
         return (AbstractCache) c;
+    }
+
+    private CacheValueHolder<Object> getL1Holder(Object key) {
+        AbstractCache c1 = getConcreteCache(l1Cache);
+        return (CacheValueHolder<Object>)
+                ((com.github.benmanes.caffeine.cache.Cache) c1.unwrap(com.github.benmanes.caffeine.cache.Cache.class))
+                        .getIfPresent(key);
+    }
+
+    private void assertHolderTtlLessThan(Object key, long startTime, long maxTtlMillis) {
+        CacheValueHolder<Object> holder = getL1Holder(key);
+        Assert.assertNotNull(holder);
+        long ttl = holder.getExpireTime() - startTime;
+        Assert.assertTrue("ttl should be less than " + maxTtlMillis + "ms but was " + ttl + "ms",
+                ttl < maxTtlMillis);
+    }
+
+    private void assertHolderTtlGreaterThan(Object key, long startTime, long minTtlMillis) {
+        CacheValueHolder<Object> holder = getL1Holder(key);
+        Assert.assertNotNull(holder);
+        long ttl = holder.getExpireTime() - startTime;
+        Assert.assertTrue("ttl should be greater than " + minTtlMillis + "ms but was " + ttl + "ms",
+                ttl > minTtlMillis);
     }
 }

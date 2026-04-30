@@ -61,12 +61,12 @@ public class MultiLevelCache<K, V> extends AbstractCache<K, V> {
 
     @Override
     public CacheResult PUT(K key, V value) {
-        return PUT(key, value, config().getExpireAfterWriteInMillis(), TimeUnit.MILLISECONDS);
+        return PUT(key, value, 0, null);
     }
 
     @Override
     public CacheResult PUT_ALL(Map<? extends K, ? extends V> map) {
-        return PUT_ALL(map, config().getExpireAfterWriteInMillis(), TimeUnit.MILLISECONDS);
+        return PUT_ALL(map, 0, null);
     }
 
     @Override
@@ -101,16 +101,9 @@ public class MultiLevelCache<K, V> extends AbstractCache<K, V> {
         long currentExpire = h.getExpireTime();
         long now = System.currentTimeMillis();
         if (now <= currentExpire) {
-            /*
-            There are two situations here from the legacy version:
-              - if isUseExpireOfSubCache, let subordinate cache choose the expiration time by itself
-              - if not, choose the remaining time of the current cache as the expiration time
-            In the current version, the remaining time of the current cache is always chosen as the expiration time,
-            but a parameter isForce is added to control that it cannot exceed the expiration time that subordinate cache configured
-             */
             long restTtl = currentExpire - now;
             if (restTtl > 0) {
-                PUT_caches(i, key, h.getValue(), restTtl, TimeUnit.MILLISECONDS);
+                PUT_caches(i, key, h.getValue(), restTtl, TimeUnit.MILLISECONDS, true);
             }
         }
     }
@@ -146,38 +139,51 @@ public class MultiLevelCache<K, V> extends AbstractCache<K, V> {
 
     @Override
     protected CacheResult do_PUT(K key, V value, long expireAfterWrite, TimeUnit timeUnit) {
-        return PUT_caches(caches.length, key, value, expireAfterWrite, timeUnit);
+        return PUT_caches(caches.length, key, value, expireAfterWrite, timeUnit, false);
     }
 
     @Override
     protected CacheResult do_PUT_ALL(Map<? extends K, ? extends V> map, long expireAfterWrite, TimeUnit timeUnit) {
+        return PUT_ALL_caches(map, expireAfterWrite, timeUnit, false);
+    }
+
+    private CacheResult PUT_ALL_caches(Map<? extends K, ? extends V> map, long expire,
+                                       TimeUnit timeUnit, boolean limitExpireByCacheConfig) {
         CompletableFuture<ResultData> future = CompletableFuture.completedFuture(null);
         for (Cache c : caches) {
             CacheResult r;
-            if(timeUnit == null) {
+            if (timeUnit == null) {
                 r = c.PUT_ALL(map);
+            } else if (limitExpireByCacheConfig) {
+                r = c.PUT_ALL(map, limitedExpireInMillis(expire, timeUnit, c), TimeUnit.MILLISECONDS);
             } else {
-                r = c.PUT_ALL(map, expireAfterWrite, timeUnit);
+                r = c.PUT_ALL(map, expire, timeUnit);
             }
             future = combine(future, r);
         }
         return new CacheResult(future);
     }
 
-    private CacheResult PUT_caches(int lastIndex, K key, V value, long expire, TimeUnit timeUnit) {
+    private CacheResult PUT_caches(int lastIndex, K key, V value, long expire,
+                                   TimeUnit timeUnit, boolean limitExpireByCacheConfig) {
         CompletableFuture<ResultData> future = CompletableFuture.completedFuture(null);
         for (int i = 0; i < lastIndex; i++) {
             Cache cache = caches[i];
             CacheResult r;
             if (timeUnit == null) {
                 r = cache.PUT(key, value);
+            } else if (limitExpireByCacheConfig) {
+                r = cache.PUT(key, value, limitedExpireInMillis(expire, timeUnit, cache), TimeUnit.MILLISECONDS);
             } else {
-                long useExpireTime = Math.min(expire, cache.config().getExpireAfterWriteInMillis());
-                r = cache.PUT(key, value, useExpireTime, timeUnit);
+                r = cache.PUT(key, value, expire, timeUnit);
             }
             future = combine(future, r);
         }
         return new CacheResult(future);
+    }
+
+    private long limitedExpireInMillis(long expire, TimeUnit timeUnit, Cache cache) {
+        return Math.min(timeUnit.toMillis(expire), cache.config().getExpireAfterWriteInMillis());
     }
 
     private CompletableFuture<ResultData> combine(CompletableFuture<ResultData> future, CacheResult result) {
