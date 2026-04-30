@@ -61,12 +61,22 @@ public class MultiLevelCache<K, V> extends AbstractCache<K, V> {
 
     @Override
     public CacheResult PUT(K key, V value) {
-        return PUT(key, value, 0, null);
+        if (useExpireOfSubCacheForDefaultWrite()) {
+            return PUT(key, value, 0, null);
+        }
+        return PUT(key, value, config().getExpireAfterWriteInMillis(), TimeUnit.MILLISECONDS);
     }
 
     @Override
     public CacheResult PUT_ALL(Map<? extends K, ? extends V> map) {
-        return PUT_ALL(map, 0, null);
+        if (useExpireOfSubCacheForDefaultWrite()) {
+            return PUT_ALL(map, 0, null);
+        }
+        return PUT_ALL(map, config().getExpireAfterWriteInMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    private boolean useExpireOfSubCacheForDefaultWrite() {
+        return !config().isUseExpireOfSubCacheConfigured() || config().isUseExpireOfSubCacheEnabled();
     }
 
     @Override

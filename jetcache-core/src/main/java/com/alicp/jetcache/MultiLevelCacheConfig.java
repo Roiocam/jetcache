@@ -10,7 +10,7 @@ import java.util.List;
  */
 public class MultiLevelCacheConfig<K, V> extends CacheConfig<K, V> {
     private List<Cache<K, V>> caches = new ArrayList<>();
-    private boolean useExpireOfSubCache;
+    private Boolean useExpireOfSubCache;
 
     @Override
     public MultiLevelCacheConfig clone() {
@@ -31,11 +31,19 @@ public class MultiLevelCacheConfig<K, V> extends CacheConfig<K, V> {
 
     @Deprecated
     public boolean isUseExpireOfSubCache() {
-        return useExpireOfSubCache;
+        return isUseExpireOfSubCacheEnabled();
     }
 
     @Deprecated
     public void setUseExpireOfSubCache(boolean useExpireOfSubCache) {
         this.useExpireOfSubCache = useExpireOfSubCache;
+    }
+
+    boolean isUseExpireOfSubCacheConfigured() {
+        return useExpireOfSubCache != null;
+    }
+
+    boolean isUseExpireOfSubCacheEnabled() {
+        return Boolean.TRUE.equals(useExpireOfSubCache);
     }
 }

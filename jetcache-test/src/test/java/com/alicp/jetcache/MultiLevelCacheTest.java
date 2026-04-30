@@ -159,6 +159,28 @@ public class MultiLevelCacheTest extends AbstractCacheTest {
         assertHolderTtlGreaterThan("explicitPutAll_key", beforePutAll, 300);
     }
 
+    @SuppressWarnings("deprecation")
+    @Test
+    public void useExpireOfSubCacheFalseShouldKeepMultiLevelDefaultExpire() {
+        initL1L2(200);
+        l1Cache.config().setExpireAfterWriteInMillis(50);
+        cache = MultiLevelCacheBuilder.createMultiLevelCacheBuilder()
+                .expireAfterWrite(200, TimeUnit.MILLISECONDS)
+                .useExpireOfSubCache(false)
+                .addCache(l1Cache, l2Cache)
+                .buildCache();
+
+        long beforePut = System.currentTimeMillis();
+        cache.put("useMultiLevelExpire_key", "V1");
+        assertHolderTtlGreaterThan("useMultiLevelExpire_key", beforePut, 120);
+
+        Map map = new HashMap();
+        map.put("useMultiLevelExpireAll_key", "V2");
+        long beforePutAll = System.currentTimeMillis();
+        cache.putAll(map);
+        assertHolderTtlGreaterThan("useMultiLevelExpireAll_key", beforePutAll, 120);
+    }
+
     private void doMonitoredTest(int expireMillis, boolean verboseLog, Runnable test) {
         initL1L2(expireMillis);
         DefaultCacheMonitor m1 = new DefaultCacheMonitor("l1");
