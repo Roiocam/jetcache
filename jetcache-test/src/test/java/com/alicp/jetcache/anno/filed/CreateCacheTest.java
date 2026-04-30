@@ -3,6 +3,7 @@ package com.alicp.jetcache.anno.filed;
 import com.alicp.jetcache.Cache;
 import com.alicp.jetcache.CacheManager;
 import com.alicp.jetcache.CacheResultCode;
+import com.alicp.jetcache.CacheValueHolder;
 import com.alicp.jetcache.LoadingCacheTest;
 import com.alicp.jetcache.MultiLevelCache;
 import com.alicp.jetcache.MultiLevelCacheConfig;
@@ -19,16 +20,21 @@ import com.alicp.jetcache.anno.config.EnableMethodCache;
 import com.alicp.jetcache.anno.support.ConfigProvider;
 import com.alicp.jetcache.anno.support.GlobalCacheConfig;
 import com.alicp.jetcache.anno.support.JetCacheBaseBeans;
+import com.alicp.jetcache.embedded.AbstractEmbeddedCache;
+import com.alicp.jetcache.embedded.EmbeddedCacheBuilder;
 import com.alicp.jetcache.embedded.EmbeddedCacheConfig;
 import com.alicp.jetcache.embedded.LinkedHashMapCache;
+import com.alicp.jetcache.embedded.LinkedHashMapCacheBuilder;
 import com.alicp.jetcache.external.ExternalCacheConfig;
 import com.alicp.jetcache.external.MockRemoteCache;
+import com.alicp.jetcache.external.MockRemoteCacheBuilder;
 import com.alicp.jetcache.support.Fastjson2KeyConvertor;
 import com.alicp.jetcache.support.JavaValueDecoder;
 import com.alicp.jetcache.support.JavaValueEncoder;
 import com.alicp.jetcache.test.AbstractCacheTest;
 import com.alicp.jetcache.test.anno.TestUtil;
 import com.alicp.jetcache.test.beans.MyFactoryBean;
+import com.alicp.jetcache.test.beans.TestBean;
 import com.alicp.jetcache.test.spring.SpringTest;
 import com.alicp.jetcache.test.support.DynamicQuery;
 import com.alicp.jetcache.test.support.DynamicQueryWithEquals;
@@ -44,6 +50,7 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import javax.annotation.PostConstruct;
+import java.util.LinkedHashMap;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -54,6 +61,10 @@ import java.util.concurrent.TimeUnit;
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration(classes = CreateCacheTest.A.class)
 public class CreateCacheTest extends SpringTest {
+
+    private static final String LOCAL_EXPIRE_AREA = "LOCAL_EXPIRE";
+    private static final long LOCAL_EXPIRE_MILLIS = 1000;
+    private static final long REMOTE_EXPIRE_MILLIS = 10000;
 
     @Test
     public void test() throws Exception {
@@ -70,6 +81,17 @@ public class CreateCacheTest extends SpringTest {
         @Bean
         public GlobalCacheConfig config() {
             GlobalCacheConfig pc = TestUtil.createGloableConfig();
+            EmbeddedCacheBuilder localBuilder = LinkedHashMapCacheBuilder.createLinkedHashMapCacheBuilder()
+                    .keyConvertor(Fastjson2KeyConvertor.INSTANCE)
+                    .expireAfterWrite(LOCAL_EXPIRE_MILLIS, TimeUnit.MILLISECONDS);
+            pc.getLocalCacheBuilders().put(LOCAL_EXPIRE_AREA, localBuilder);
+
+            MockRemoteCacheBuilder remoteBuilder = MockRemoteCacheBuilder.createMockRemoteCacheBuilder();
+            remoteBuilder.setKeyConvertor(Fastjson2KeyConvertor.INSTANCE);
+            remoteBuilder.setValueEncoder(JavaValueEncoder.INSTANCE);
+            remoteBuilder.setValueDecoder(JavaValueDecoder.INSTANCE);
+            remoteBuilder.setExpireAfterWriteInMillis(REMOTE_EXPIRE_MILLIS);
+            pc.getRemoteCacheBuilders().put(LOCAL_EXPIRE_AREA, remoteBuilder);
             return pc;
         }
 
@@ -90,6 +112,9 @@ public class CreateCacheTest extends SpringTest {
 
             @Autowired
             private CacheManager cacheManager;
+
+            @Autowired
+            private TestBean testBean;
 
             @CreateCache
             private Cache cache1;
@@ -135,6 +160,9 @@ public class CreateCacheTest extends SpringTest {
             @CreateCache(expire = 2, localExpire = 1, cacheType = CacheType.LOCAL)
             private Cache cacheWithLocalExpire_3;
 
+            @CreateCache(area = LOCAL_EXPIRE_AREA, cacheType = CacheType.BOTH)
+            private Cache createCacheBothWithoutLocalExpire;
+
 
             private Cache getTarget(Cache cache) {
                 while(cache instanceof ProxyCache){
@@ -150,6 +178,7 @@ public class CreateCacheTest extends SpringTest {
                 cacheWithoutConvertorTest();
                 AbstractCacheTest.penetrationProtectTest(cacheWithProtect);
                 testCacheWithLocalExpire();
+                testAnnotationBothCacheUsesLocalBuilderExpire();
 
                 cache1.put("KK1", "V1");
                 Assert.assertNull(cache_A1.get("KK1"));
@@ -199,6 +228,37 @@ public class CreateCacheTest extends SpringTest {
                 Assert.assertEquals(2000, config.getCaches().get(1).config().getExpireAfterWriteInMillis());
 
                 Assert.assertEquals(2000, cacheWithLocalExpire_3.config().getExpireAfterWriteInMillis());
+            }
+
+            private void testAnnotationBothCacheUsesLocalBuilderExpire() {
+                String createCacheKey = "createCacheBothWithoutLocalExpire_key";
+                long beforeCreateCachePut = System.currentTimeMillis();
+                createCacheBothWithoutLocalExpire.put(createCacheKey, "V1");
+                assertLocalHolderUsesLocalBuilderExpire(createCacheBothWithoutLocalExpire, createCacheKey,
+                        beforeCreateCachePut);
+
+                String cachedKey = "cachedBothWithoutLocalExpire_key";
+                long beforeCachedInvoke = System.currentTimeMillis();
+                testBean.cachedBothWithoutLocalExpire(cachedKey);
+                Cache cached = cacheManager.getCache(LOCAL_EXPIRE_AREA, "cachedBothWithoutLocalExpire");
+                assertLocalHolderUsesLocalBuilderExpire(cached, cachedKey, beforeCachedInvoke);
+            }
+
+            private void assertLocalHolderUsesLocalBuilderExpire(Cache cache, Object key, long startTime) {
+                MultiLevelCache multiLevelCache = (MultiLevelCache) getTarget(cache);
+                Cache localCache = getTarget(multiLevelCache.caches()[0]);
+                Cache remoteCache = getTarget(multiLevelCache.caches()[1]);
+                Assert.assertEquals(REMOTE_EXPIRE_MILLIS, multiLevelCache.config().getExpireAfterWriteInMillis());
+                Assert.assertEquals(LOCAL_EXPIRE_MILLIS, localCache.config().getExpireAfterWriteInMillis());
+                Assert.assertEquals(REMOTE_EXPIRE_MILLIS, remoteCache.config().getExpireAfterWriteInMillis());
+
+                Object builtKey = ((AbstractEmbeddedCache) localCache).buildKey(key);
+                LinkedHashMap localMap = (LinkedHashMap) localCache.unwrap(LinkedHashMap.class);
+                CacheValueHolder holder = (CacheValueHolder) localMap.get(builtKey);
+                Assert.assertNotNull(holder);
+                long localTtl = holder.getExpireTime() - startTime;
+                Assert.assertTrue("local ttl should use local builder expire but was " + localTtl + "ms",
+                        localTtl > 0 && localTtl < REMOTE_EXPIRE_MILLIS / 2);
             }
 
             private void runGeneralTest() throws Exception {

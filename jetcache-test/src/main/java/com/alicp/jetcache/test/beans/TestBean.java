@@ -62,6 +62,11 @@ public class TestBean {
         return count++;
     }
 
+    @Cached(area = "LOCAL_EXPIRE", name = "cachedBothWithoutLocalExpire", cacheType = CacheType.BOTH, key = "#key")
+    public String cachedBothWithoutLocalExpire(String key) {
+        return "V_" + key + count++;
+    }
+
 
     @Cached(enabled = false)
     public int countWithDisabledCache(){
