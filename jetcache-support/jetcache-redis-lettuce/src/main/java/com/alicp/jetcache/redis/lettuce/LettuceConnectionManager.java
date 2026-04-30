@@ -49,17 +49,14 @@ public class LettuceConnectionManager {
     }
 
     /**
-     * @deprecated use init with {@link this#init(AbstractRedisClient, StatefulConnection, StatefulRedisPubSubConnection)}
+     * @deprecated use init with {@link #init(AbstractRedisClient, StatefulConnection, StatefulRedisPubSubConnection)}
      * @param redisClient
      * @param connection
      */
     @Deprecated
     public void init(AbstractRedisClient redisClient, StatefulConnection connection) {
-        map.computeIfAbsent(redisClient, key -> {
-            LettuceObjects lo = new LettuceObjects();
-            lo.connection = connection;
-            return lo;
-        });
+        LettuceObjects lo = map.computeIfAbsent(redisClient, key -> new LettuceObjects());
+        lo.connection = connection;
     }
 
     /**
@@ -72,12 +69,13 @@ public class LettuceConnectionManager {
         if (connection == null && pubSubConnection == null) {
             throw new IllegalArgumentException("connection and pubSubConnection cannot both be null");
         }
-        map.computeIfAbsent(redisClient, key -> {
-            LettuceObjects lo = new LettuceObjects();
+        LettuceObjects lo = map.computeIfAbsent(redisClient, key -> new LettuceObjects());
+        if (connection != null) {
             lo.connection = connection;
+        }
+        if (pubSubConnection != null) {
             lo.pubSubConnection = pubSubConnection;
-            return lo;
-        });
+        }
     }
 
     public StatefulConnection connection(AbstractRedisClient redisClient) {
